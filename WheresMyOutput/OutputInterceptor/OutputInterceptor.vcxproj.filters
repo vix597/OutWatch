@@ -15,24 +15,21 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="dllmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="injector.cpp">
+    <ClCompile Include="named_pipe_server.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="process_util.cpp">
+    <ClCompile Include="mem_util.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="injector.h">
+    <ClInclude Include="named_pipe_server.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="process_util.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="status.h">
+    <ClInclude Include="mem_util.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

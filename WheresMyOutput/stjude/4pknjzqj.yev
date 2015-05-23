@@ -1,0 +1,147 @@
+#include "process_util.h"
+#include "status.h"
+
+#include <Windows.h>
+#include <Shlwapi.h>
+#include <TlHelp32.h>
+#include <iostream>
+
+#pragma comment(lib,"shlwapi.lib")
+#pragma comment(lib,"advapi32.lib")
+
+//
+//Compute the offset to a function within a module
+//
+Status GetFunctionOffset(const std::wstring& library, const std::string& functionName, uint64_t * funcOffset)
+{
+	Status ret;
+	uint64_t offset = 0;
+	std::wstring functionNameW;
+	functionNameW.assign(functionName.begin(), functionName.end());
+	HMODULE hLoaded = LoadLibraryW(library.c_str());
+	if (!hLoaded){
+		std::wcerr << "Failed to load library: " << library.c_str() << " with error: " << GetLastError() << "\n";
+		return 0;
+	}
+
+	void* functionAddress = GetProcAddress(hLoaded, functionName.c_str());
+	if (!functionAddress){
+		err = L"Unable to load procedure: " + functionNameW + L" with error: " + to_wstring(GetLastError()) + L" from library: " + library;
+		return 0;
+	}
+
+	offset = (uint64_t)functionAddress - (uint64_t)hLoaded;
+
+	FreeLibrary(hLoaded);
+	return offset;
+}
+
+int GetProcessIdByName(const wstring& processName, wstring &err)
+{
+	PROCESSENTRY32W pe32;
+	HANDLE hSnapshot = INVALID_HANDLE_VALUE;
+
+	//Get snapshot of all processes
+	pe32.dwSize = sizeof(PROCESSENTRY32W);
+	hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
+	//Can we start looking?
+	if (!Process32FirstW(hSnapshot, &pe32))
+	{
+		err = L"Unable to search process list";
+		CloseHandle(hSnapshot);
+		return 0;
+	}
+
+	//Enumerate all processes till we find the one we are looking for or until every one of them is checked
+	while (wcscmp(pe32.szExeFile, processName.c_str()) != 0 && Process32NextW(hSnapshot, &pe32));
+
+	//Close the handle
+	CloseHandle(hSnapshot);
+
+	//Check if process id was found and return it
+	if (wcscmp(pe32.szExeFile, processName.c_str()) == 0)
+		return pe32.th32ProcessID;
+
+	err = L"Process: " + processName + L" not found";
+	return 0;
+}
+
+uint64_t GetRemoteModuleHandle(int processId, const wstring& moduleName, wstring &err)
+{
+	MODULEENTRY32W me32;
+	HANDLE hSnapshot = INVALID_HANDLE_VALUE;
+
+	//Get snapshot of all modules in the remote process 
+	me32.dwSize = sizeof(MODULEENTRY32W);
+	hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, processId);
+
+	//Can we start looking?
+	if (!Module32FirstW(hSnapshot, &me32))
+	{
+		err = L"Unable to search module list in pid: " + to_wstring(processId);
+		CloseHandle(hSnapshot);
+		return 0;
+	}
+
+	//Enumerate all modules till we find the one we are looking for or until every one of them is checked
+	while (wcscmp(me32.szModule, moduleName.c_str()) != 0 && Module32NextW(hSnapshot, &me32));
+
+	//Close the handle
+	CloseHandle(hSnapshot);
+
+	//Check if module handle was found and return it
+	if (wcscmp(me32.szModule, moduleName.c_str()) == 0)
+		return (uint64_t)me32.modBaseAddr;
+	err = L"Module: " + moduleName + L" not found in process: " + to_wstring(processId);
+	return 0;
+}
+
+void EnablePrivilege(const wstring& priviledgeName, bool enable, wstring &err)
+{
+	//Get the access token of the current process
+	HANDLE token;
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token))
+		return;
+
+	//Build the privilege
+	TOKEN_PRIVILEGES privileges;
+	RtlSecureZeroMemory(&privileges, sizeof(privileges));
+	privileges.PrivilegeCount = 1;
+	privileges.Privileges[0].Attributes = (enable) ? SE_PRIVILEGE_ENABLED : 0;
+	if (!LookupPrivilegeValueW(NULL, priviledgeName.c_str(), &privileges.Privileges[0].Luid))
+	{
+		err = L"Unable to lookup privilege token value: " + to_wstring(GetLastError());
+		CloseHandle(token);
+		return;
+	}
+
+	// add the privilege
+	BOOL result = AdjustTokenPrivileges(token, FALSE, &privileges, sizeof(privileges), NULL, NULL);
+
+	// close the handle
+	CloseHandle(token);
+}
+
+bool SetVirtualMemory(uint64_t addr, uint64_t size, void * data, wstring &err)
+{
+	DWORD oldProtect = 0;
+	DWORD newProtext = PAGE_EXECUTE_READWRITE;
+
+	if (!VirtualLock((LPVOID)addr, size)){
+		err = L"Unable to lock page: " + to_wstring(GetLastError());
+		return false;
+	}
+
+	if (!VirtualProtect((LPVOID)addr, size, newProtext, &oldProtect)){
+		err = L"Unable to change memory permissions: " + to_wstring(GetLastError());
+		VirtualUnlock((LPVOID)addr, size);
+		return false;
+	}
+
+	RtlCopyMemory((LPVOID)addr, data, size);
+
+	VirtualUnlock((LPVOID)addr, size);
+	VirtualProtect((LPVOID)addr, size, oldProtect, &newProtext);
+	return true;
+}
