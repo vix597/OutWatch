@@ -153,11 +153,13 @@
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="hook.cpp" />
+    <ClCompile Include="hook_util.cpp" />
     <ClCompile Include="mem_util.cpp" />
     <ClCompile Include="named_pipe_server.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="hook.h" />
+    <ClInclude Include="hook_util.h" />
     <ClInclude Include="mem_util.h" />
     <ClInclude Include="named_pipe_server.h" />
   </ItemGroup>

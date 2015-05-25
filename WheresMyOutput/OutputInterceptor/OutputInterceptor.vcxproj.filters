@@ -27,6 +27,9 @@
     <ClCompile Include="hook.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="hook_util.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="named_pipe_server.h">
@@ -36,6 +39,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="hook.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="hook_util.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
