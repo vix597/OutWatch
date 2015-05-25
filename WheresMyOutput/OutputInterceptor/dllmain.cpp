@@ -21,7 +21,7 @@ extern "C" {
 
 static NamedPipeServer * outputServer = NULL;
 
-int write_hook(int a, void * b, unsigned int c);
+BOOL write_hook(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped);
 
 BOOL APIENTRY DllMain(IN HINSTANCE hDll, IN DWORD reason, IN LPVOID reserved)
 {
@@ -33,18 +33,15 @@ HRESULT Init(PVOID unused)
 	if (!outputServer)
 		outputServer = new NamedPipeServer();
 
-	//
-	//TODO: Figure out how to get this address dynamically
-	//
+	FARPROC fnWriteFile = GetProcAddress(GetModuleHandleA("Kernel32"), "WriteFile");
+
 #if defined(_WIN64)
-	uint64_t fnWrite = 0;
 	(*hookAddr) = (uint64_t)write_hook;
 #else
-	uint32_t fnWrite = 0x00ce39eb;
 	(*hookAddr) = (uint32_t)write_hook;
 #endif
 	
-	if (!SetVirtualMemory((LPVOID)fnWrite, sizeof(hookBytes), hookBytes))
+	if (!SetVirtualMemory((LPVOID)fnWriteFile, sizeof(hookBytes), hookBytes))
 		return 1;
 
 	// Flush the cache so we know that our new code gets executed.
@@ -61,12 +58,13 @@ HRESULT DeInit(PVOID unused)
 	return S_OK;
 }
 
-int write_hook(int fd, void * data, unsigned int size)
+BOOL write_hook(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped)
 {
-	BYTE * bytes = new BYTE[size];
-	RtlCopyMemory(bytes, data, size);
-	outputServer->SendData(size,(BYTE*)bytes);
+	BYTE * bytes = new BYTE[nNumberOfBytesToWrite];
+	RtlCopyMemory(bytes, lpBuffer, nNumberOfBytesToWrite);
+	outputServer->SendData(nNumberOfBytesToWrite,(BYTE*)bytes);
 	delete[] bytes;
 
-	return size;
+	(*lpNumberOfBytesWritten) = nNumberOfBytesToWrite;
+	return TRUE;
 }
