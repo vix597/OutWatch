@@ -163,10 +163,25 @@ Status Injector::ExecRemoteProc(LPVOID function, PVOID arg, uint32_t argSize)
 
 	hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)function, remoteArgAddress, 0, NULL);
 	if (!hThread){
-		ret.errorString = "Unable to inject the DLL into the remote process with CreateRemoteThread()";
-		ret.errorCode = GetLastError();
+		if (GetLastError() == ERROR_NOT_ENOUGH_MEMORY){//This is thrown when attempting to access a process running as another user
+			if ((ret = ImpersonateUser()).success){
+				//Try again
+				hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)function, remoteArgAddress, 0, NULL);
+				if (!hThread){
+					ret.errorString = "Unable to inject the DLL after user impersonation";
+					ret.errorCode = GetLastError();
+				}
+			}
+			else if (ret.errorCode == ERROR_ACCESS_DENIED)//Probably trying to inject into a process running as system. Be more aggressive
+				ret = ForceCreateRemoteThread(function, remoteArgAddress);
+		}
+		else{
+			ret.errorString = "Unable to inject the DLL into the remote process with CreateRemoteThread()";
+			ret.errorCode = GetLastError();
+		}
 	}
-	else{
+	
+	if(hThread){
 		WaitForSingleObject(hThread, INFINITE);
 		ret.success = true;
 	}
@@ -180,6 +195,27 @@ Status Injector::ExecRemoteProc(LPVOID function, PVOID arg, uint32_t argSize)
 		ret.errorCode = exitCode;
 	}
 
+	return ret;
+}
+
+Status Injector::ImpersonateUser()
+{
+	Status ret;
+	HANDLE hToken;
+
+	if (!OpenProcessToken(hProcess, TOKEN_IMPERSONATE, &hToken)){
+		ret.errorString = "Unable to open process token for impersonation";
+		ret.errorCode = GetLastError();
+		return ret;
+	}
+	
+	if (!ImpersonateLoggedOnUser(hToken)){
+		ret.errorString = "Unable to impersonate user";
+		ret.errorCode = GetLastError();
+		return ret;
+	}
+
+	ret.success = true;
 	return ret;
 }
 
@@ -204,6 +240,40 @@ Status Injector::GetRemoteProcAddress(const wstring& modulePath, const wstring& 
 	ret.success = false;
 
 	(*remoteProcAddr) = (LPVOID)((uint64_t)moduleBaseAddr + offset);
+	ret.success = true;
+	return ret;
+}
+
+Status Injector::ForceCreateRemoteThread(PVOID function, PVOID remoteArgAddress)
+{
+	Status ret;
+	HANDLE hThread = NULL;
+	_RtlCreateUserThread fnRtlCreateUserThread = (_RtlCreateUserThread)GetProcAddress(GetModuleHandleA("ntdll"), "RtlCreateUserThread");
+	if (!fnRtlCreateUserThread){
+		ret.errorString = "Cannot get address of RtlCreateUserThread";
+		ret.errorCode = GetLastError();
+		return ret;
+	}
+
+	fnRtlCreateUserThread(
+		hProcess,
+		NULL,
+		FALSE,
+		0,
+		NULL,
+		NULL,
+		function,
+		remoteArgAddress,
+		&hThread,
+		NULL
+	);
+	if (!hThread){
+		ret.errorString = "Failed to force creation of remote thread";
+		ret.errorCode = GetLastError();
+		return ret;
+	}
+
+	WaitForSingleObject(hThread, INFINITE);
 	ret.success = true;
 	return ret;
 }

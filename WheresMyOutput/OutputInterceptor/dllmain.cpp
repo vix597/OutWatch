@@ -40,7 +40,7 @@ HRESULT Init(PVOID unused)
 	uint64_t fnWrite = 0;
 	(*hookAddr) = (uint64_t)write_hook;
 #else
-	uint32_t fnWrite = 0x0f1717f0;
+	uint32_t fnWrite = 0x00ce39eb;
 	(*hookAddr) = (uint32_t)write_hook;
 #endif
 	
