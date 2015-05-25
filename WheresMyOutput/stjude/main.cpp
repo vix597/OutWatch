@@ -110,7 +110,6 @@ void ReceiveOutput()
 	BYTE buffer[BUFFER_SIZE] = { 0 };
 	DWORD nBytesReceived = 0;
 	HANDLE hPipe = NULL;
-	stringstream ss;
 
 	hPipe = CreateFileA(
 		PIPE_SERVER_NAME,
@@ -132,11 +131,9 @@ void ReceiveOutput()
 		do{
 			ReadFile(hPipe, buffer, sizeof(buffer), &nBytesReceived, NULL);
 			if (nBytesReceived > 0){
-				ss << buffer;
+				cout << buffer;
 				RtlSecureZeroMemory(buffer, sizeof(buffer));
 			}
 		} while (GetLastError() == ERROR_MORE_DATA);
-		cout << ss.str();
-		ss.str(string());
 	}
 }
