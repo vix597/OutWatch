@@ -54,19 +54,15 @@ void NamedPipeServer::DoWork()
 		if (connected || error == ERROR_PIPE_CONNECTED){
 			OutputDebugStringA("Connected\n");
 			
-			connectionMtx.lock();
 			hCurrentConnection = currentPipe;
-			connectionMtx.unlock();
 
 			WaitNamedPipeA(PIPE_SERVER_NAME, NMPWAIT_WAIT_FOREVER);
 
-			connectionMtx.lock();
 			FlushFileBuffers(hCurrentConnection);
 			DisconnectNamedPipe(hCurrentConnection);
 			CloseHandle(hCurrentConnection);
 			hCurrentConnection = NULL;
 			currentPipe = NULL;
-			connectionMtx.unlock();
 		}
 		else if (error == ERROR_NO_DATA){
 			OutputDebugStringA("Client disconnect\n");
@@ -84,8 +80,6 @@ void NamedPipeServer::SendData(uint64_t length, BYTE * data)
 	uint64_t bytesToSend = 0;
 	uint64_t totalBytesSent = 0;
 	
-	lock_guard<mutex> lock(connectionMtx);
-
 	if (!hCurrentConnection || hCurrentConnection == INVALID_HANDLE_VALUE)
 		return;
 

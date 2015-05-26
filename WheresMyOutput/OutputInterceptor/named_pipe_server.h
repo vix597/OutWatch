@@ -12,7 +12,6 @@
 class NamedPipeServer{
 private:
 	std::thread serverThread;
-	std::mutex connectionMtx;
 	HANDLE hServerStopEvent;
 	HANDLE hCurrentConnection;
 private:

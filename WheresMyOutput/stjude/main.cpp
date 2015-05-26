@@ -94,6 +94,15 @@ int wmain(int argc, wchar_t * argv[])
 	cout << "Thread exit code: " << status.errorCode << "\n";
 
 	g_receiveOutputThread = thread(ReceiveOutput);
+
+	if (!(status = injector.CallRemoteProc(g_modulePath, g_moduleName, "Hook", NULL, 0)).success){
+		cerr << "Hook() failed: " << status.errorString << " " << status.errorCode << "\n";
+		injector.UnloadModule(g_moduleName);
+		injector.Detach();
+		ConsoleHandler(CTRL_C_EVENT);
+		return 1;
+	}
+
 	if (g_receiveOutputThread.joinable())
 		g_receiveOutputThread.join();
 
