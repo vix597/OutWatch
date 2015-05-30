@@ -95,7 +95,7 @@ int wmain(int argc, wchar_t * argv[])
 
 	g_receiveOutputThread = thread(ReceiveOutput);
 
-	if (!(status = injector.CallRemoteProc(g_modulePath, g_moduleName, "Hook", NULL, 0)).success){
+	if (!(status = injector.CallRemoteProc(g_modulePath, g_moduleName, "InsertHook", NULL, 0)).success){
 		cerr << "Hook() failed: " << status.errorString << " " << status.errorCode << "\n";
 		injector.UnloadModule(g_moduleName);
 		injector.Detach();
@@ -118,11 +118,12 @@ void ReceiveOutput()
 {
 	BYTE buffer[BUFFER_SIZE] = { 0 };
 	DWORD nBytesReceived = 0;
+	DWORD setMode = PIPE_READMODE_MESSAGE;
 	HANDLE hPipe = NULL;
 
 	hPipe = CreateFileA(
 		PIPE_SERVER_NAME,
-		GENERIC_READ,
+		GENERIC_READ | FILE_WRITE_ATTRIBUTES,
 		0,
 		NULL,
 		OPEN_EXISTING,
@@ -131,6 +132,10 @@ void ReceiveOutput()
 	);
 	if (!hPipe){
 		cerr << "Unable to open pipe to receive output: " << GetLastError() << "\n";
+		return;
+	}
+	if (!SetNamedPipeHandleState(hPipe, &setMode, NULL, NULL)){
+		cerr << "Unable to set pipe handle state: " << GetLastError() << "\n";
 		return;
 	}
 

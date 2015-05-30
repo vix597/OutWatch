@@ -4,30 +4,32 @@
 #include <sstream>
 
 #include "named_pipe_server.h"
-#include "mem_util.h"
+#include "hook.h"
 
 using namespace std;
 
 #define STD_OUT (HANDLE)0x07
 #define STD_ERR (HANDLE)0x0b
 
-#if defined(_WIN64)
-static uint8_t hookBytes[] = { 0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0xC3};
-static uint64_t * hookAddr = (uint64_t*)&hookBytes[2];
-#else
-static uint8_t hookBytes[] = { 0xB8, 0x00, 0x00, 0x00, 0x00, 0x50, 0xC3};
-static uint32_t * hookAddr = (uint32_t*)&hookBytes[1];
-#endif
-
 extern "C" {
 	__declspec(dllexport) HRESULT Init(PVOID unused);
 	__declspec(dllexport) HRESULT DeInit(PVOID unused);
-	__declspec(dllexport) HRESULT Hook(PVOID unused);
+	__declspec(dllexport) HRESULT InsertHook(PVOID unused);
 }
 
 static NamedPipeServer * outputServer = NULL;
+static Hook hWriteFile;
 
-void write_hook(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped);
+void write_hook(
+#ifndef _WIN64
+	LPVOID reserved1,//The nature of our hook results in an extra 32-bit value on the stack
+#endif
+	HANDLE hFile, 
+	LPCVOID lpBuffer, 
+	DWORD nNumberOfBytesToWrite, 
+	LPDWORD lpNumberOfBytesWritten, 
+	LPOVERLAPPED lpOverlapped
+);
 
 BOOL APIENTRY DllMain(IN HINSTANCE hDll, IN DWORD reason, IN LPVOID reserved)
 {
@@ -41,7 +43,7 @@ HRESULT Init(PVOID unused)
 	return S_OK;
 }
 
-HRESULT Hook(PVOID unused)
+HRESULT InsertHook(PVOID unused)
 {
 	std::stringstream msg;
 
@@ -58,20 +60,11 @@ HRESULT Hook(PVOID unused)
 	msg << "Found WriteFile: 0x" << std::hex << fnWriteFile << "\n";
 	outputServer->SendData(msg.str().length(), (BYTE*)msg.str().c_str());
 
-#if defined(_WIN64)
-	(*hookAddr) = (uint64_t)write_hook;
-#else
-	(*hookAddr) = (uint32_t)write_hook;
-#endif
-
-	if (!SetVirtualMemory((LPVOID)fnWriteFile, sizeof(hookBytes), hookBytes)){
-		msg << "Cannot set hook: " << GetLastError() << "\n";
+	if(!hWriteFile.InstallHook(fnWriteFile,write_hook)){
+		msg << "HOOK ERROR: "<<hWriteFile.GetErrorString()<<"\n";
 		outputServer->SendData(msg.str().length(), (BYTE*)msg.str().c_str());
 		return 2;
 	}
-
-	// Flush the cache so we know that our new code gets executed.
-	FlushInstructionCache(GetCurrentProcess(), NULL, NULL);
 
 	return S_OK;
 }
@@ -84,10 +77,20 @@ HRESULT DeInit(PVOID unused)
 	return S_OK;
 }
 
-void write_hook(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped)
+void write_hook(
+#ifndef _WIN64
+	LPVOID reserved1,
+#endif
+	HANDLE hFile,
+	LPCVOID lpBuffer,
+	DWORD nNumberOfBytesToWrite,
+	LPDWORD lpNumberOfBytesWritten,
+	LPOVERLAPPED lpOverlapped
+)
 {
 	if (hFile != STD_OUT && hFile != STD_ERR){
-		return;
+		return;//SInce SendData() below calls WriteFile, we need this check to avoid
+			   //a recursive hook loop
 	}
 
 	BYTE * bytes = new BYTE[nNumberOfBytesToWrite];
@@ -95,6 +98,5 @@ void write_hook(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPD
 	outputServer->SendData(nNumberOfBytesToWrite,bytes);
 	delete[] bytes;
 
-	(*lpNumberOfBytesWritten) = nNumberOfBytesToWrite;
 	return;
 }

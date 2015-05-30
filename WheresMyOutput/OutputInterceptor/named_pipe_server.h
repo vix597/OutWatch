@@ -7,7 +7,7 @@
 #include <iostream>
 
 #define PIPE_SERVER_NAME "\\\\.\\pipe\\StJudeOutput"
-#define BUFFER_SIZE 32768
+#define BUFFER_SIZE 0x10000 //64k
 
 class NamedPipeServer{
 private:

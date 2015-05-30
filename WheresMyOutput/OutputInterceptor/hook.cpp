@@ -8,7 +8,8 @@ Hook::Hook() :
 	trampoline(NULL),
 	preHookBytes(NULL),
 	boundary(0),
-	hooked(false)
+	hooked(false),
+	errorString()
 {}
 
 Hook::~Hook()
@@ -40,6 +41,7 @@ bool Hook::InstallHook(LPVOID target, LPVOID hook)
 		HeapDestroy(trampoline_heap);
 		trampoline_heap = NULL;
 		boundary = 0;
+		errorString = "Failed to allocate trampoline on heap";
 		return false;
 	}
 
@@ -47,12 +49,15 @@ bool Hook::InstallHook(LPVOID target, LPVOID hook)
 	RtlCopyMemory(preHookBytes, target, boundary);
 
 #if defined(_WIN64)
-	(*targetRet) = (uint64_t)target + (boundary - 1);//minus 1 for pop rax instruction
+	(*targetRet) = (uint64_t)target + (boundary - 1);// -1 for 0x58 (pop rax)
 	(*hookAddr) = (uint64_t)hook;
 	(*heapBufAddr) = (uint64_t)trampoline;
 #else
-	(*targetRet) = (uint32_t)target + (boundary - 1);//minus 1 for pop eax instruction
-	(*hookAddr) = (uint32_t)hook;
+	uint32_t jmp_start = (uint32_t)target + (sizeof(hookBytes) - 1);
+	uint32_t jmp_target = (uint32_t)hook;
+
+	(*targetRet) = (uint32_t)target + (boundary - 1);// -1 for 0x58 (pop eax)
+	(*hookOffset) = (jmp_target - jmp_start);
 	(*heapBufAddr) = (uint32_t)trampoline;
 #endif
 
@@ -78,6 +83,7 @@ bool Hook::InstallHook(LPVOID target, LPVOID hook)
 		hook_target = target;
 		return true;
 	}
+	errorString = "Failed, cannot set hook in memory. VirtualProtect failed: " + std::to_string(GetLastError());
 
 	delete[] preHookBytes;
 	preHookBytes = NULL;

@@ -22,7 +22,7 @@
     <ProjectGuid>{9717A7B0-6261-4793-A234-097478B11A2C}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>WheresMyOutput</RootNamespace>
-    <ProjectName>stjude</ProjectName>
+    <ProjectName>OutWatch</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

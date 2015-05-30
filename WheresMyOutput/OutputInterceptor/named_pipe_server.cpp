@@ -2,11 +2,15 @@
 
 using namespace std;
 
-NamedPipeServer::NamedPipeServer()
+NamedPipeServer::NamedPipeServer() :
+	serverThread(),
+	hServerStopEvent(NULL),
+	hCurrentConnection(NULL)
 {
 	hServerStopEvent = CreateEventA(NULL, TRUE, FALSE, NULL);
 	if (!hServerStopEvent)
 		throw runtime_error("Could not create worker thread stop event");
+	
 	serverThread = thread(&NamedPipeServer::DoWork, this);
 }
 
@@ -75,21 +79,10 @@ void NamedPipeServer::DoWork()
 
 void NamedPipeServer::SendData(uint64_t length, BYTE * data)
 {
-	DWORD bytesSent = 0;
-	uint64_t bytesLeft = 0;
-	uint64_t bytesToSend = 0;
-	uint64_t totalBytesSent = 0;
-	
+	DWORD nBytesWritten = 0;
+
 	if (!hCurrentConnection || hCurrentConnection == INVALID_HANDLE_VALUE)
 		return;
 
-	while (totalBytesSent < length){
-		bytesLeft = length - totalBytesSent;
-		bytesToSend = (bytesLeft > BUFFER_SIZE) ? BUFFER_SIZE : bytesLeft;
-
-		if (!WriteFile(hCurrentConnection, &data[totalBytesSent], (DWORD)bytesToSend, &bytesSent, NULL)){
-			return;
-		}
-		totalBytesSent += bytesSent;
-	}
+	WriteFile(hCurrentConnection, data, length, &nBytesWritten, NULL);
 }
